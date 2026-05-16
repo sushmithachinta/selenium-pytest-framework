@@ -1,0 +1,61 @@
+name: Selenium Test Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 0 * * *'   # Nightly at midnight UTC
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Chrome
+        uses: browser-actions/setup-chrome@latest
+
+      - name: Run Smoke Tests
+        run: |
+          pytest -m smoke --headless --html=reports/smoke_report.html --self-contained-html -v
+
+      - name: Run Full Regression
+        if: success()
+        run: |
+          pytest -m regression --headless -n 2 --html=reports/regression_report.html --self-contained-html -v
+
+      - name: Upload Test Reports
+        uses: actions/upload-artifact@v3
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            reports/smoke_report.html
+            reports/regression_report.html
+            reports/test_run.log
+            reports/screenshots/
+
+      - name: Upload Screenshots on Failure
+        uses: actions/upload-artifact@v3
+        if: failure()
+        with:
+          name: failure-screenshots
+          path: reports/screenshots/FAILED_*.png
